@@ -7,7 +7,7 @@ type Storage = {
 var M = Contract<Storage>()
 
 function M:init()
-    print("³õÊ¼»¯")
+    print("åˆå§‹åŒ–")
     self.storage.name = "MDT"
 	self.storage.transfer_version = 0
     self.storage.balance = {}
@@ -92,7 +92,7 @@ function M:query_balance()
     end
 
     local balance = self.storage.balance[caller_address]
-    print("TOKEN:MDT:BLC:¡±..caller_address..":"..tostring(balance)..":END")
+    print("TOKEN:MDT:BLC:Â¡Â±..caller_address..":"..tostring(balance)..":END")
 end
 
 function M:COIN_MDT()
