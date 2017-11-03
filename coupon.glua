@@ -1,0 +1,95 @@
+type Storage = {
+    name:string,
+    rechargeAddress:string,
+    multiple:int,
+    participant:Map<int>,
+    count:int
+}
+
+-- rechargeAddress is the Contract owner address
+-- count is the number of participants
+
+var M = Contract<Storage>()
+
+function M:init()
+    print("initialize...")
+    self.storage.name = "BONUS"
+    self.storage.multiple=10
+    self.storage.rechargeAddress = "ALPEJ3CSxQ2GKXaNDTWE4oNM8pSuG6nwJFNW"
+    self.storage.participant = {}
+    self.storage.count = 0
+end
+
+-- Get current coupon info
+
+local function transfer_failed(address:string)
+    local errorNumber = tointeger(-1000)
+    local res = transfer_from_contract_to_address(address, "ALP", errorNumber)
+end
+
+function M:get_coupon_info()
+    local contractAddress = get_current_contract_address()
+    local balance = get_contract_balance_amount(contractAddress, "ALP")
+    print("coupon owner£º", self.storage.rechargeAddress)
+    print("coupon balance:", balance / 100000.0, "ACT")
+    print("number of participants:", self.storage.count)
+end
+
+function M:on_deposit(numstr:int)
+    
+    -- If recharge, don't participate the coupon.
+    
+    print("recharge the contract ", numstr / 100000.0, "ACT")
+    local address = caller_address
+    if address == self.storage.rechargeAddress then
+        return
+    end
+    
+    if self.storage.participant[address] ~= nil then
+        print("user already participate in coupon")
+        transfer_failed(address)
+        return
+    end
+    
+    self.storage.participant[address] = get_header_block_num()
+    self.storage.count = self.storage.count + 1
+    
+    -- reward
+    -- first generate a random number between numstr to numstr*x
+    
+    local result = get_waited(get_header_block_num()) + get_chain_random()
+    local randomNumber = result % (numstr * self.storage.multiple)
+    if randomNumber < numstr then
+        randomNumber = numstr
+    end
+    
+    local contractAddress = get_current_contract_address()
+    local balance = get_contract_balance_amount(contractAddress, "ALP")
+    
+    -- if insufficient balance, coupon failed.
+    
+    if balance < numstr then
+        print("insufficient balance")
+        transfer_failed(address)
+        return
+    end
+    
+    if balance < randomNumber then
+        randomNumber = balance
+    end
+    
+    -- second transfer ACT to the caller
+    
+    local randomNumberInteger = tointeger(randomNumber)
+    local res = transfer_from_contract_to_address(address, "ALP", randomNumberInteger)
+    local realACTNumber = randomNumberInteger / 100000.0
+    if res == 0 then
+        print("Congratulations on getting ", realACTNumber,  "ACT")
+    elseif res == 5 then
+        print("infufficient balance")
+    elseif res == 6 then
+        print("Transfer amount is negative")
+    end
+end
+
+return M
