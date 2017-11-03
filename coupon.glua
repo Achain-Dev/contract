@@ -14,8 +14,8 @@ var M = Contract<Storage>()
 function M:init()
     print("initialize...")
     self.storage.name = "BONUS"
-    self.storage.multiple=10
-    self.storage.rechargeAddress = "ALPEJ3CSxQ2GKXaNDTWE4oNM8pSuG6nwJFNW"
+    self.storage.multiple = 10
+    self.storage.rechargeAddress = "ACTKicDdtiHde2TbPKX9yfnh4jTUsZo5my1r"
     self.storage.participant = {}
     self.storage.count = 0
 end
@@ -24,12 +24,12 @@ end
 
 local function transfer_failed(address:string)
     local errorNumber = tointeger(-1000)
-    local res = transfer_from_contract_to_address(address, "ALP", errorNumber)
+    local res = transfer_from_contract_to_address(address, "ACT", errorNumber)
 end
 
 function M:get_coupon_info()
     local contractAddress = get_current_contract_address()
-    local balance = get_contract_balance_amount(contractAddress, "ALP")
+    local balance = get_contract_balance_amount(contractAddress, "ACT")
     print("coupon owner£º", self.storage.rechargeAddress)
     print("coupon balance:", balance / 100000.0, "ACT")
     print("number of participants:", self.storage.count)
@@ -64,7 +64,7 @@ function M:on_deposit(numstr:int)
     end
     
     local contractAddress = get_current_contract_address()
-    local balance = get_contract_balance_amount(contractAddress, "ALP")
+    local balance = get_contract_balance_amount(contractAddress, "ACT")
     
     -- if insufficient balance, coupon failed.
     
@@ -81,7 +81,7 @@ function M:on_deposit(numstr:int)
     -- second transfer ACT to the caller
     
     local randomNumberInteger = tointeger(randomNumber)
-    local res = transfer_from_contract_to_address(address, "ALP", randomNumberInteger)
+    local res = transfer_from_contract_to_address(address, "ACT", randomNumberInteger)
     local realACTNumber = randomNumberInteger / 100000.0
     if res == 0 then
         print("Congratulations on getting ", realACTNumber,  "ACT")
