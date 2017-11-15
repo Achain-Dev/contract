@@ -1,0 +1,598 @@
+type Storage = {
+    signture_agree:Array<string>,
+    signture_disagree:Array<string>,
+    apply_type:int,
+    issuer:Map<int>,
+    partner:Map<int>,
+    partner_half_num:int,
+    issue_num:int,
+    apply_address:string,
+    balance:Map<int>,
+    transfer_version:int,
+    destroy_address:string,
+    candidate_address:string,
+    address_prefix:string,
+    coin_type:string,
+    partner_all_num:int,
+    issue_current_total:int
+}
+
+var M = Contract<Storage>()
+
+--[[
+    Token init
+]]
+function M:init()
+    print("init start...")
+    self.storage.signture_agree = []
+    self.storage.signture_disagree = []
+    self.storage.partner = {}
+    self.storage.issuer = {}
+    self.storage.balance = {}
+    self.storage.apply_type=0
+    self.storage.issue_num = 0
+    self.storage.transfer_version = 0
+    self.storage.issue_current_total = 0
+    self.storage.apply_address = ''
+    self.storage.candidate_address = ''
+    self.storage.destroy_address = 'ACTBlackHole'
+    self.storage.partner['ACTJiXjttoeRKjqub6d2ftNc7sBhtYQPAeyy']=1
+    self.storage.partner['ACT2SKpg5X5E6EyHfxy1jmVSSg7a1fQXSTBW']=1
+    self.storage.partner['ACT25oPCY6h2UW56ezJ9Fw8VGL6KusUmhjmb']=1
+    self.storage.partner['ACT5xY1p5aXye7jj7RWEW3apqyXFwW3AG9mE']=1
+    self.storage.issuer['ACT6AAX1aV52xes9qzMFgAuiEVAuUraR8Q8N']=1
+    self.storage.issuer['ACTAekKHRMb6cfNV7M1FkLkQyW6tfQkLyupg']=1
+    self.storage.issuer['ACTGv9WFXffy49W85kneHyDuFmLUYCKar3J5']=1
+    self.storage.partner_all_num=4
+    self.storage.partner_half_num=2
+    self.storage.address_prefix='ACT'
+    self.storage.coin_type='USC'
+end
+
+--[[
+    Token type USC
+]]
+function M:COIN_USC()
+    return self.storage.coin_type
+end
+
+--[[
+    local function
+    Token check_and_return_address
+]]
+local function check_and_return_address(address:string,prefix:string)
+    local to_address = address;
+    local size = string.len(to_address)
+    if string.sub(to_address, 1,3) ~= prefix then
+        return
+    end
+    if size < 35 then
+      return
+    end
+    if size > 70 then
+      return
+    end
+    if size > 50 then
+      to_address = string.sub(to_address, 1, size-32)
+    end
+    size = string.len(to_address)
+    if size < 35 then
+      return
+    end
+    return to_address
+end
+
+--[[
+    local function
+    Token check_and_return_balance
+]]
+local function check_and_return_balance(balance:string)
+    local temp_balance = tonumber(balance)
+    if temp_balance == nil or temp_balance <= 0  then
+        return 0
+    end
+    local add_num = (temp_balance + 0.0000001) * 100000
+    return tointeger(add_num)
+end
+
+--[[
+    local function
+    Token check_apply
+]]
+local function check_apply(arg:string,apply_address:string,map:Map<int>,address_prefix:string,destroy_address:string)
+    if apply_address ~= ''  then
+        print('Another vote is in progress')
+        return false
+    end
+    if map[caller_address] == nil then
+        print('caller_address is invalid')
+        return false
+    end
+	local to_address = check_and_return_address(arg,address_prefix);
+    if to_address == nil or to_address == '' then
+      print('candidate_address is invalid')
+      return false
+    end
+    if destroy_address == to_address then
+		print('candidate_address is invalid')
+        return false
+	end
+	return true
+end
+
+--[[
+    local function
+    Token check_signture
+]]
+local function check_signture(arg:string,apply_address:string,partner:Map<int>,signture:Array<string>,signture_d:Array<string>)
+    if apply_address == caller_address or apply_address == ''  then
+        print('No vote available or you can not vote for yourself')
+        return false
+    end
+    if partner[caller_address] == nil then
+	    print('caller_address is invalid')
+	    return false
+	end
+    if arg ~= apply_address then
+        print('Parameter Address does not match')
+        return false
+    end
+    for k,v in pairs(signture) do
+        if caller_address == v then
+            print('Have been involved(signture_agree)')
+            return false
+        end
+    end
+    for k,v in pairs(signture_d) do
+        if caller_address == v then
+            print('Have been involved (signture_disagree)')
+            return false
+        end
+    end
+    return true
+end
+
+--[[
+    local function
+    Token getNum
+]]
+local function getSize(map:Map<int>)
+        local _num = 0
+        for k,v in pairs(map) do
+            if k ~= nil or v ~= nil then
+                 _num = _num + 1
+           end
+        end
+        return _num
+end
+
+--[[
+    local function
+    Token getLog
+]]
+local function getLog(list:Array<string>)
+        local list_log = ''
+        if table.length(list) > 0 then
+          for k,v in pairs(list) do
+             if k ~= nil or v ~= nil then
+                list_log = tostring(v)..","..list_log
+             end
+          end
+        end
+        return list_log
+end
+
+
+--[[
+    local function
+    Token getLog
+]]
+local function getMapLog(map:Map<int>)
+        local list_log = ''
+        for k,v in pairs(map) do
+             if k ~= nil or v ~= nil then
+                list_log = tostring(k)..","..list_log
+             end
+        end
+        return list_log
+end
+
+--[[
+    Token issue_apply
+    apply_type = 1 issue apply
+    101:Another vote is in progress
+    102:issue_apply caller_address is invalid
+    103:issue_apply issue_balance is invalid
+]]
+function M:issue_apply(arg:string)
+    local _apply_address = self.storage.apply_address
+    if _apply_address ~= ''  then
+        emit issue_apply_fail('101')
+        print('Another vote is in progress')
+        return false
+    end
+    local issuer_temp = self.storage.issuer[caller_address]
+    if issuer_temp == nil then
+        emit issue_apply_fail('102')
+        print('Issue_apply caller_address is invalid')
+        return false
+    end
+    local add_balance = check_and_return_balance(arg)
+    if add_balance == nil or add_balance <= 0  then
+        emit issue_apply_fail('103')
+        print('issue_apply issue_balance is invalid')
+        return false
+    end
+    self.storage.issue_num = add_balance
+    self.storage.apply_address = caller_address
+    self.storage.apply_type = 1
+    local issue_apply_log = "apply_type"..":"..tostring(self.storage.apply_type)..",".."apply_address"..":"..caller_address..",".."add_balance"..":"..arg
+    emit issue_apply_success(issue_apply_log)
+    print('issue_apply success'..":"..issue_apply_log)
+    return true
+end
+
+--[[
+    Token issuer_change_apply
+    apply_type = 2 add partner apply
+    apply_type = 3 delete partner apply
+    201:Another vote is in progress
+    202:partner_apply caller_address is invalid
+    203:partner_apply candidate_address is invalid
+    204:The partner number of at least 1
+]]
+function M:issuer_change_apply(arg:string)
+	local result = check_apply(arg,self.storage.apply_address,self.storage.issuer,self.storage.address_prefix,self.storage.destroy_address)
+    if result == false then
+        emit issuer_change_apply_fail('201')
+        return false
+    end
+    local issuer_temp = self.storage.issuer[arg]
+    if issuer_temp == nil then
+        self.storage.apply_type = 4
+    else
+        if  getSize(self.storage.issuer) <= 3 then
+            emit partner_apply_fail('204')
+            print('Retain at least three candidate')
+            return false
+        end
+        self.storage.apply_type = 5
+    end
+    self.storage.apply_address = caller_address
+    self.storage.candidate_address = arg
+    local issue_apply_log = "apply_type"..":"..tostring(self.storage.apply_type)..",".."apply_address"..":"..caller_address..",".."candidate_address"..":"..arg
+    emit partner_apply_success(issue_apply_log)
+    print('issuer_change_apply'..":"..issue_apply_log)
+    return true
+end
+
+
+--[[
+    Token partner_apply
+    apply_type = 2 add partner apply
+    apply_type = 3 delete partner apply
+    201:Another vote is in progress
+    202:partner_apply caller_address is invalid
+    203:partner_apply candidate_address is invalid
+    204:The partner number of at least 4 
+]]
+function M:partner_apply(arg:string)
+	local result = check_apply(arg,self.storage.apply_address,self.storage.issuer,self.storage.address_prefix,self.storage.destroy_address)
+    if result == false then
+        emit partner_apply_fail('201')
+        return false
+    end
+    local partner_temp = self.storage.partner[arg]
+    if partner_temp == nil then
+        self.storage.apply_type = 2
+    else
+        if self.storage.partner_all_num <= 3 then
+            emit partner_apply_fail('204')
+            print('Retain at least three candidate')
+            return false
+        end
+        self.storage.apply_type = 3
+    end
+    self.storage.apply_address = caller_address
+    self.storage.candidate_address = arg
+    local issue_apply_log = "apply_type"..":"..tostring(self.storage.apply_type)..",".."apply_address"..":"..caller_address..",".."candidate_address"..":"..arg
+    emit partner_apply_success(issue_apply_log)
+    print('partner_apply_success'..":"..issue_apply_log)
+    return true
+end
+
+--[[
+    Token signture_agree
+    301:No vote available or you can not vote for yourself
+    302:caller_address is invalid
+    303:Parameter Address does not match
+    304:Have been involved
+]]
+function M:signture_agree(arg:string)
+    local in_flag = check_signture(arg,self.storage.apply_address,self.storage.partner,self.storage.signture_agree,self.storage.signture_disagree)
+    if in_flag == true then
+        self.storage.signture_agree[#self.storage.signture_agree+1] = caller_address
+    else
+        emit signture_agree_fail('304')
+        return false
+    end
+    local _apply_type = self.storage.apply_type
+    local _apply_address = self.storage.apply_address
+    if (table.length(self.storage.signture_agree) >= self.storage.partner_half_num) and (table.length(self.storage.signture_agree) ~= self.storage.partner_all_num/2) then
+        if _apply_type == 1 then
+            local balance_temp = self.storage.balance[_apply_address]
+            if balance_temp == nil then
+                self.storage.balance[_apply_address] = 0
+            end
+            self.storage.balance[_apply_address] = self.storage.balance[_apply_address] + self.storage.issue_num
+            self.storage.issue_current_total = self.storage.issue_current_total + self.storage.issue_num
+            local _apply_address_log = "apply_type"..":"..tostring(_apply_type)..",".."issue_current_total"..":"..tostring(self.storage.issue_current_total)
+            emit signture_agree_finished(_apply_address_log)
+            print('signture_agree_finished'..":".._apply_address_log)
+        end
+        if _apply_type == 2 then
+            local temp_candidate_address = self.storage.candidate_address
+            self.storage.partner[temp_candidate_address]=1
+        end
+        if _apply_type == 3 then
+            for k,v in pairs(self.storage.partner) do
+                if k == self.storage.candidate_address then
+                    local _candidate_address = self.storage.candidate_address
+                    self.storage.partner[_candidate_address] = nil
+                end
+            end
+        end
+        if _apply_type == 4 then
+            local temp_candidate_address_1 = self.storage.candidate_address
+            self.storage.issuer[temp_candidate_address_1]=1
+        end
+        if _apply_type == 5 then
+            for k,v in pairs(self.storage.issuer) do
+                if k == self.storage.candidate_address then
+                    local _candidate_address = self.storage.candidate_address
+                    self.storage.issuer[_candidate_address] = nil
+                end
+            end
+        end
+        if _apply_type == 2 or _apply_type == 3 then
+            local _partner_list_log = ''
+            local _num = 0
+            for k,v in pairs(self.storage.partner) do
+                if k ~= nil or v ~= nil then
+                    _partner_list_log = tostring(k)..",".._partner_list_log
+                    _num = _num + 1
+                end
+            end
+            self.storage.partner_all_num =_num
+            self.storage.partner_half_num = tointeger((_num)/2 + (_num)%2)
+            local ww_apply_address_log = "apply_type"..":"..tostring(_apply_type)..",".._partner_list_log
+            emit signture_agree_finished(ww_apply_address_log)
+            print('signture_agree_finished'..":"..ww_apply_address_log)
+        end
+        if _apply_type == 4 or _apply_type == 5 then
+            local _issuer_list_log = ''
+            for k,v in pairs(self.storage.issuer) do
+                if k ~= nil or v ~= nil then
+                    _issuer_list_log = tostring(k)..",".._issuer_list_log
+                end
+            end
+            local issuer_apply_address_log = "apply_type"..":"..tostring(_apply_type)..",".._issuer_list_log
+            emit signture_agree_finished(issuer_apply_address_log)
+            print('signture_agree_finished'..":"..issuer_apply_address_log)
+        end
+        self.storage.signture_agree = []
+        self.storage.signture_disagree = []
+        self.storage.apply_address='' 
+        self.storage.issue_num = 0
+        self.storage.apply_type = 0
+        self.storage.candidate_address=''
+    else
+        local s_apply_address_log = "apply_type"..":"..tostring(_apply_type)..","..caller_address
+        emit signture_agree_success(s_apply_address_log)
+        print('signture_agree_success'..":"..s_apply_address_log)
+    end
+    return true
+end
+
+--[[
+    Token signture_disagree
+    401:No vote available or you can not vote for yourself
+    402:caller_address is invalid
+    403:Parameter Address does not match
+    404:Have been involved
+]]
+
+function M:signture_disagree(arg:string)
+    local in_flag = check_signture(arg,self.storage.apply_address,self.storage.partner,self.storage.signture_agree,self.storage.signture_disagree)
+    if in_flag == true then
+        self.storage.signture_disagree[#self.storage.signture_disagree+1] = caller_address
+    else
+        emit signture_agree_fail('304')
+        return false
+    end
+    local _apply_type = self.storage.apply_type
+    local partner_num = self.storage.partner_half_num;
+    local _apply_address = self.storage.apply_address
+    if table.length(self.storage.signture_disagree) >= partner_num then
+        self.storage.signture_agree = []
+        self.storage.signture_disagree = []
+        self.storage.issue_num = 0
+        self.storage.apply_type = 0
+        self.storage.candidate_address=''
+        self.storage.apply_address=''
+        local _apply_address_log = "apply_type"..":"..tostring(_apply_type)..",".._apply_address
+        emit signture_disagree_finished(_apply_address_log)
+        print('signture_disagree_finished'..":".._apply_address_log)
+    else
+        local s_apply_address_log = "apply_type"..":"..tostring(_apply_type)..","..caller_address
+        emit signture_disagree_success(s_apply_address_log)
+        print('signture_disagree_success'..":"..s_apply_address_log)
+    end
+    return true
+end
+
+
+--[[
+    Token destroy
+    501:Another vote is in progress
+    502:caller_address is invalid(Permission denied)
+    503:arg is invalid
+    504:Insufficient balance
+]]
+function M:_destroy(arg:string)
+    local _apply_address = self.storage.apply_address
+    if _apply_address ~= ''  then
+        emit destroy_fail('501')
+        print('Another vote is in progress')
+        return false
+    end
+    local issuer_temp = self.storage.issuer[caller_address]
+    if issuer_temp == nil then
+	    emit destroy_fail('502')
+	    print('caller_address is invalid(Permission denied)')
+	    return false
+	end
+	
+	local destroy_balance = check_and_return_balance(arg)
+	local _destroy_address=self.storage.destroy_address
+    if destroy_balance <= 0 then
+        emit destroy_fail('702')
+        return false
+    end
+    if (self.storage.balance[caller_address] == nil) or (self.storage.balance[caller_address] <= 0) or (self.storage.balance[caller_address] < destroy_balance) then
+        emit destroy_fail('504')
+        print('Insufficient balance')
+        return false
+    end
+    self.storage.balance[caller_address] = self.storage.balance[caller_address] - destroy_balance
+    if self.storage.balance[_destroy_address] == nil then
+        self.storage.balance[_destroy_address] = 0
+    end
+    self.storage.balance[_destroy_address] = self.storage.balance[_destroy_address] + destroy_balance
+    self.storage.issue_current_total = self.storage.issue_current_total - destroy_balance
+  	local _destroy_log = caller_address..":"..tostring(self.storage.balance[caller_address])..",".."issue_current_total"..":"..tostring(self.storage.issue_current_total)..","..tostring(get_chain_now())
+	emit destroy_success(_destroy_log)
+	print('destroy_success'..":".._destroy_log)
+	return true
+end
+
+--[[
+    Token transfer
+    701:Transfer address is invalid
+    702:Transfer balance is invalid
+    703:Transfer Account is invalid
+    704:Balance is insufficient
+]]
+function M:transfer_to(arg:string)
+    arg=string.gsub(arg, "%s","")
+    local items:Array<string>
+    items = []
+    items = string.split(arg, '|')
+    local to_address = check_and_return_address(items[1],self.storage.address_prefix);
+    if to_address == nil or to_address == '' then
+      print('candidate_address is invalid')
+      return false
+    end
+    local _destroy_address=self.storage.destroy_address
+    if _destroy_address == to_address or caller_address == _destroy_address then
+		emit transfer_to_fail("701")
+        return false
+	end
+    if caller_address == to_address then
+		emit transfer_to_fail("701")
+        return false
+	end
+	local transfer_balance_number = check_and_return_balance(items[2])
+    if transfer_balance_number <= 0 then
+        emit transfer_to_fail('702')
+        return false
+    end
+    local balance = self.storage.balance[caller_address]
+    if balance == nil then
+        emit transfer_to_fail('703')
+        return false
+    end
+    if balance < transfer_balance_number then
+		--add error massage
+        emit transfer_to_fail('704')
+        return false
+    end
+	balance =  balance - transfer_balance_number
+    self.storage.balance[caller_address] =  balance
+	local to_balance = self.storage.balance[to_address]    
+    if to_balance == nil then
+       to_balance = 0
+    end
+
+	to_balance = to_balance + transfer_balance_number
+    self.storage.balance[to_address] = to_balance
+    
+	local version = self.storage.transfer_version
+	version = tointeger((version+1)%1000000	)
+	self.storage.transfer_version = version
+    local temp_transfer_log = caller_address..":"..tostring(balance)..","..to_address..":"..tostring(to_balance)..","..tostring(version)..","..tostring(get_chain_now())
+	emit transfer_to_success(temp_transfer_log)	
+	return true
+end
+
+--[[
+    Query Balance
+]]
+function M:query_balance(arg:string)
+    local to_address = check_and_return_address(arg,self.storage.address_prefix);
+    if to_address == nil or to_address == '' then
+      to_address = caller_address
+    end
+    if self.storage.balance[to_address] == nil then
+        print("TOKEN:"..self.storage.coin_type..":BLC:"..to_address..":0:END") 
+        return 0
+    end
+    local balance = self.storage.balance[to_address]
+    print("TOKEN:"..self.storage.coin_type..":BLC:"..to_address..":"..tostring(balance)..":END") 
+    return balance
+end
+
+--[[
+    Query query_issue_current_total
+]]
+function M:query_issue_current_total()
+  	emit issue_current_total(tostring(self.storage.issue_current_total))
+  	print(tostring(self.storage.issue_current_total))
+  	return self.storage.issue_current_total
+end
+
+--[[
+    Query query_current_apply
+]]
+function M:query_current_status()
+    local _apply_type = self.storage.apply_type
+    local _apply_address = self.storage.apply_address
+  	local log_info = "apply_address:".._apply_address..",apply_type:"..tostring(_apply_type)..",remark:"
+  	local log_info_1=""
+  	local temp = "partner:"..getMapLog(self.storage.partner)..",issuer:"..getMapLog(self.storage.issuer)
+  	if _apply_type == 0 then
+  	    emit query_current_apply("There is no ongoing vote!"..temp)
+      	print("There is no ongoing vote"..temp)
+      	return "There is no ongoing vote"..temp
+  	end
+  	if _apply_type == 1 then
+  	    log_info_1 = "Issue application,issue_num is "..tostring(self.storage.issue_num)
+  	end
+  	if _apply_type == 2 then
+  	    log_info_1 = "Add partner application,candidate_address is "..self.storage.candidate_address
+  	end
+  	if _apply_type == 3 then
+  	    log_info_1 = "Delete partner application,candidate_address is "..self.storage.candidate_address
+  	end
+  	if _apply_type == 4 then
+  	    log_info_1 = "Add issuer application,candidate_address is "..self.storage.candidate_address
+  	end
+  	if _apply_type == 5 then
+  	    log_info_1 = "Delete issuer application,candidate_address is "..self.storage.candidate_address
+  	end
+  	local result = log_info..log_info_1..",signture_agree:"..getLog(self.storage.signture_agree)..",signture_disagree:"..getLog(self.storage.signture_disagree)..","..temp
+    emit query_current_apply(result)
+  	print(result)
+  	return result
+end
+return M
