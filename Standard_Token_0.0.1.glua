@@ -1,0 +1,330 @@
+type ContractInfo = {
+    contractName:string,
+    officalAddress:string,
+    symbol:string,
+    decimals:int,
+    totalSupply:int
+}
+
+type allowed = {
+    from_address:string,
+    to_address:string,
+    balance:int
+}
+
+type params = {
+    from_address:string,
+    to_address:string,
+    balance:int,
+    flag:bool
+}
+
+type Storage = {
+    balances:Map<int>,
+    allowed:Map<int>,
+	contractInfo:string,
+	transfer_version:int,
+	addressPrefix:string,
+	parameterSplitLine:string
+}
+
+var M = Contract<Storage>()
+
+local function initContractInfo()
+    local info:ContractInfo = ContractInfo()
+    info.contractName="XXX_COIN"
+    info.officalAddress="ACT4hEdETpigo4FkxvSM8bZdSChAhWxG6rK1"
+    info.symbol="XXX"
+    info.decimals =  100000
+    info.totalSupply=10000000000000000
+    return json.dumps(info)
+end
+
+function M:init()
+    self.storage.contractInfo = initContractInfo()
+	self.storage.transfer_version = 0
+    self.storage.balances = {}
+    self.storage.allowed = {}
+    local info:ContractInfo = totable(json.loads(self.storage.contractInfo))
+    local officalAddress:string = info.officalAddress
+    self.storage.balances[officalAddress] = info.totalSupply
+    self.storage.addressPrefix = "ACT"
+    self.storage.parameterSplitLine = '|'
+end
+
+function M:COIN_XXX()
+end
+
+function M:contractInfo()
+    -- pprint(json.dumps(self.storage.contractInfo))
+    emit contractInfo(json.dumps(self.storage.contractInfo))
+    return json.dumps(self.storage.contractInfo)
+end
+
+function M:contractName()
+    local temp:ContractInfo = totable(json.loads(self.storage.contractInfo))
+    emit contractName(temp.contractName)
+    -- pprint(temp.contractName)
+    return temp.contractName
+end
+
+function M:officalAddress()
+    local temp:ContractInfo = totable(json.loads(self.storage.contractInfo))
+    emit officalAddress(temp.officalAddress)
+    -- pprint(temp.officalAddress)
+    return temp.officalAddress
+end
+
+function M:totalSupply()
+    local temp:ContractInfo = totable(json.loads(self.storage.contractInfo))
+    emit totalSupply(tostring(temp.totalSupply))
+    -- pprint(tostring(temp.totalSupply))
+    return temp.totalSupply
+end
+
+function M:symbol()
+    local temp:ContractInfo = totable(json.loads(self.storage.contractInfo))
+    emit symbol(temp.symbol)
+    -- pprint(tostring(temp.symbol))
+    return temp.symbol
+end
+
+function M:decimals()
+    local temp:ContractInfo = totable(json.loads(self.storage.contractInfo))
+    emit decimals(tostring(temp.decimals))
+    -- pprint(tostring(temp.decimals))
+    return temp.decimals
+end
+
+function M:balanceOf(_owner:string)
+    if _owner == nil or _owner == "" then
+        _owner = caller_address
+    end
+    -- print(self.storage.balances[_owner])
+    local balance:int = self.storage.balances[_owner]
+    if balance == nil then
+        balance = 0
+    end
+    emit balanceOf(tostring(balance))
+    -- print(tostring(balance))
+    return balance
+end
+
+--[[
+    local function
+    Token check_and_return_address
+]]
+local function check_and_return_address(address:string,prefix:string)
+    local to_address:string = address;
+    local check_r:int = transfer_from_contract_to_address(address, "CHECKADD", tointeger(1000000000000000000))
+    if check_r == -4 or check_r == -1 then
+        return
+    end
+    local size = string.len(to_address)
+    if string.sub(to_address, 1,3) ~= prefix then
+        return
+    end
+    if size < 35 then
+      return
+    end
+    if size > 70 then
+      return
+    end
+    if size > 50 then
+      to_address = string.sub(to_address, 1, size-32)
+    end
+    size = string.len(to_address)
+    if size < 35 then
+      return
+    end
+    return to_address
+end
+
+--[[
+    local function
+    Token check_and_return_balance
+]]
+local function check_and_return_balance(balance:string,decimals:int)
+    local temp_balance:number = tonumber(balance)
+    if temp_balance == nil or temp_balance <= 0  then
+        return 0
+    end
+    local add_num = (temp_balance + 1/(decimals*1000)) * decimals
+    return tointeger(add_num)
+end
+
+local function check_params(_from:string, _to:string, _value:string,addressPrefix:string,contractInfo:string)
+    local from_address:string = check_and_return_address(_from,addressPrefix);
+    local params:params = params()
+    params.flag=true
+    if _from ~= '' and (from_address == nil or from_address == '')then
+      -- pprint('from_address is invalid')
+      params.flag = false
+      return json.dumps(params)
+    end
+    local to_address:string = check_and_return_address(_to,addressPrefix);
+    if to_address == nil or to_address == '' then
+      -- pprint('To_address is invalid')
+      params.flag = false
+      return json.dumps(params)
+    end
+    local temp:ContractInfo = totable(json.loads(contractInfo))
+    local transfer_balance_number:int = check_and_return_balance(_value,temp.decimals)
+    if _value ~= '0' and transfer_balance_number <= 0 then
+        -- pprint('Illegal parameter')
+        params.flag = false
+        return json.dumps(params)
+    end
+    params.from_address = from_address
+    params.to_address = to_address
+    params.balance = transfer_balance_number
+    -- pprint(json.dumps(params))
+    return json.dumps(params)
+end
+
+function M:transfer_to(_to_value:string)
+    local params:Array<string> = string.split(string.gsub(_to_value, "%s",""), self.storage.parameterSplitLine)
+    if #params < 2 then
+       emit transfer_to_fail('Illegal parameter')
+       return false
+    end
+    local local_params:params = totable(json.loads(check_params('', params[1], params[2],self.storage.addressPrefix,self.storage.contractInfo)))
+    if local_params.flag == false then
+       emit transfer_to_fail('Illegal parameter')
+       return false
+    end
+    local balance:int = self.storage.balances[caller_address]
+    local transfer_balance_number:int = local_params.balance
+    if balance == nil or balance < transfer_balance_number then
+        -- pprint('Insufficient amount')
+        emit transfer_to_fail('Insufficient amount')
+        return false
+    end
+    local to_address:string = local_params.to_address
+    if caller_address ~= to_address and transfer_balance_number > 0 then
+        self.storage.balances[caller_address] =  balance - transfer_balance_number
+	    local to_balance = self.storage.balances[to_address]   
+        if to_balance == nil then
+           self.storage.balances[to_address] = transfer_balance_number
+        else
+	      self.storage.balances[to_address] = to_balance + transfer_balance_number
+	    end
+	end
+	self.storage.transfer_version = tointeger((self.storage.transfer_version+1) % 100000000)
+    local temp_transfer_log = caller_address..":"..tostring(self.storage.balances[caller_address])..","..to_address..":"..tostring(self.storage.balances[to_address])..","..tostring(self.storage.transfer_version)..","..tostring(get_chain_now())
+	emit transfer_to_success(temp_transfer_log)	
+	-- pprint(temp_transfer_log)
+	return true
+end
+
+function M:approve(_spender_value:string)
+    local params:Array<string> = string.split(string.gsub(_spender_value, "%s",""), self.storage.parameterSplitLine)
+    if #params < 2 then
+       -- pprint('Illegal parameter')
+       emit approve_fail('Illegal parameter')
+       return false
+    end
+    local local_params:params = totable(json.loads(check_params('', params[1], params[2],self.storage.addressPrefix,self.storage.contractInfo)))
+    if local_params.flag == false then
+       emit approve_fail('Illegal parameter')
+       return false
+    end
+    local to_address:string = params[1]
+    local transfer_balance_number:int = local_params.balance
+    local temp_balance:int = self.storage.allowed[caller_address..":"..to_address] 
+    if temp_balance == nil then
+        temp_balance = 0
+    end
+    local balance:int = self.storage.balances[caller_address]
+    local temp_balance_all:int = temp_balance + transfer_balance_number
+    if balance == nil or balance < temp_balance_all then
+        -- pprint('Insufficient amount')
+        emit approve_fail('Insufficient amount')
+        return false
+    end
+    self.storage.allowed[caller_address..":"..to_address] = temp_balance_all
+    local allowedTemp:allowed = allowed()
+    allowedTemp.from_address=caller_address
+    allowedTemp.to_address=to_address
+    allowedTemp.balance=transfer_balance_number
+    emit approve_success(json.dumps(allowedTemp))
+    -- pprint(json.dumps(allowedTemp))
+    return true
+end
+
+function M:allowance(_owner_spender:string)
+    local params:Array<string> = string.split(string.gsub(_owner_spender, "%s",""), self.storage.parameterSplitLine)
+    if #params < 2 then
+       emit allowance_fail('Illegal parameter')
+       return 0
+    end
+    local local_params:params = totable(json.loads(check_params(params[1], params[2], "0",self.storage.addressPrefix,self.storage.contractInfo)))
+    if local_params.flag == false then
+       emit allowance_fail('Illegal parameter')
+       return 0
+    end
+    local key:string = params[1]..":"..params[2]
+    emit allowance_success(tostring(self.storage.allowed[key]))
+    -- pprint(tostring(self.storage.allowed[key]))
+    return self.storage.allowed[key]
+end
+
+function M:transferFrom(_from_to_value:string)
+    local params:Array<string> = string.split(string.gsub(_from_to_value, "%s",""), self.storage.parameterSplitLine)
+    if #params < 3 then
+       -- pprint('Illegal parameter')
+       emit transfer_to_fail('Illegal parameter')
+       return false
+    end
+    local local_params:params = totable(json.loads(check_params(params[1], params[2], params[3],self.storage.addressPrefix,self.storage.contractInfo)))
+    if local_params.flag == false then
+       emit transfer_to_fail('Illegal parameter')
+       return false
+    end
+    local from_address:string = local_params.from_address
+    if from_address == nil or from_address == '' then
+        from_address = caller_address
+    end
+    local to_address:string = local_params.to_address
+    local from:string = params[1]
+    local to:string = params[2]
+    local allowedTemp:int = self.storage.allowed[from..":"..to]
+    local balance = self.storage.balances[from_address]
+    local transfer_balance_number:int = local_params.balance
+    if (allowedTemp == nil) or (allowedTemp < transfer_balance_number) or (balance == nil) or (balance < transfer_balance_number)  then
+        -- pprint('Insufficient amount')
+        emit transfer_to_fail('Insufficient amount')
+        return false
+    end
+    if from_address ~= to_address and transfer_balance_number > 0 then
+        self.storage.balances[from_address] =  balance - transfer_balance_number
+	    local to_balance:int = self.storage.balances[to_address]   
+        if to_balance == nil then
+           self.storage.balances[to_address] = transfer_balance_number
+        else
+	      self.storage.balances[to_address] = to_balance + transfer_balance_number
+	    end
+	end
+	self.storage.allowed[from..":"..to] = allowedTemp - transfer_balance_number
+	self.storage.transfer_version = tointeger((self.storage.transfer_version+1) % 100000000)
+    local temp_transfer_log = from_address..":"..tostring(self.storage.balances[from_address])..","..to_address..":"..tostring(self.storage.balances[to_address])..","..tostring(self.storage.transfer_version)..","..tostring(get_chain_now())
+	emit transfer_to_success(temp_transfer_log)	
+	-- pprint(temp_transfer_log)
+	return true
+end
+
+--[[
+    Query Balance for old
+]]
+function M:query_balance()
+    local temp:ContractInfo = totable(json.loads(self.storage.contractInfo))
+    if self.storage.balances[caller_address] == nil then
+        print("TOKEN:"..temp.symbol..":BLC:"..caller_address..":0:END") 
+        emit query_balance("0")
+        return
+    end
+    local balance = self.storage.balances[caller_address]
+    print("TOKEN:"..temp.symbol..":BLC:"..caller_address..":"..tostring(balance)..":END") 
+    emit query_balance(tostring(balance))
+end
+return M
